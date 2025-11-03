@@ -63,6 +63,7 @@ SPIBus::SPIBus(uint8_t _bus):
 SPIDevice::SPIDevice(SPIBus &_bus, SPIDeviceDesc &_device_desc)
     : bus(_bus)
     , device_desc(_device_desc)
+    , cs_locked(false)
 {
 
 #ifdef SPIDEBUG
@@ -175,9 +176,22 @@ void SPIDevice::acquire_bus(bool accuire)
         spi_device_acquire_bus(current_handle(), portMAX_DELAY);
         gpio_set_level(device_desc.cs, 0);
     } else {
-        gpio_set_level(device_desc.cs, 1);
+        if (!cs_locked) gpio_set_level(device_desc.cs, 1);
         spi_device_release_bus(current_handle());
     }
+}
+
+/*
+  allow for control of SPI chip select pin
+ */
+bool SPIDevice::set_chip_select(bool set) {
+    if (set) {
+        gpio_set_level(device_desc.cs, 0);
+    } else {
+        gpio_set_level(device_desc.cs, 1);
+    }
+    cs_locked = set;
+    return true;
 }
 
 AP_HAL::Semaphore *SPIDevice::get_semaphore()
