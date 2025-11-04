@@ -104,3 +104,8 @@ define AP_SCRIPTING_ENABLED 0
 
 # This is a board that's not really intended for anything other than copter
 AUTOBUILD_TARGETS Copter
+
+# ToF sensor XSHUT control pins
+# We disable the Front sensor and enable only the Bottom sensor for altitude measurement
+define TOF_XSHUT_FRONT 9
+define TOF_XSHUT_BOTTOM 7

@@ -47,3 +47,11 @@ BATT_SERIAL_NUM -1
 
 # Optical Flow settings
 FLOW_TYPE 2
+# Rangefinder settings (VL53L3C on I2C bus 0)
+RNGFND1_TYPE 46      # VL53L3C
+RNGFND1_ADDR 41      # 0x29 in decimal
+RNGFND1_BUS 0        # I2C bus 0
+RNGFND1_ORIENT 25    # Down
+RNGFND1_MIN_CM 1     # Minimum distance 1cm
+RNGFND1_MAX_CM 600   # Maximum distance 6m (VL53L3C can measure up to 5m+)
+RNGFND1_GNDCLEAR 1   # Ground clearance 1cm
