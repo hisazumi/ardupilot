@@ -60,29 +60,46 @@ AP_RangeFinder_VL53L3C::AP_RangeFinder_VL53L3C(RangeFinder::RangeFinder_State &_
 */
 AP_RangeFinder_Backend *AP_RangeFinder_VL53L3C::detect(RangeFinder::RangeFinder_State &_state, AP_RangeFinder_Params &_params, AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev, DistanceMode mode)
 {
+    DEV_PRINTF("VL53L3C: Starting detection\n");
+
     if (!_dev) {
+        DEV_PRINTF("VL53L3C: ERROR - No I2C device provided\n");
         return nullptr;
     }
 
+    DEV_PRINTF("VL53L3C: Creating sensor instance\n");
     AP_RangeFinder_VL53L3C *sensor = NEW_NOTHROW AP_RangeFinder_VL53L3C(_state, _params, std::move(_dev));
 
     if (!sensor) {
+        DEV_PRINTF("VL53L3C: ERROR - Failed to allocate sensor instance\n");
         return nullptr;
     }
 
     sensor->mode = mode;
 
     // Take semaphore for initialization (ArduPilot standard pattern)
+    DEV_PRINTF("VL53L3C: Taking I2C semaphore\n");
     sensor->dev->get_semaphore()->take_blocking();
 
     // Check product ID and initialize sensor
-    if (!sensor->check_id() || !sensor->init(mode)) {
+    DEV_PRINTF("VL53L3C: Checking sensor ID\n");
+    if (!sensor->check_id()) {
+        DEV_PRINTF("VL53L3C: ERROR - Sensor ID check failed\n");
+        sensor->dev->get_semaphore()->give();
+        delete sensor;
+        return nullptr;
+    }
+
+    DEV_PRINTF("VL53L3C: Initializing sensor\n");
+    if (!sensor->init(mode)) {
+        DEV_PRINTF("VL53L3C: ERROR - Sensor initialization failed\n");
         sensor->dev->get_semaphore()->give();
         delete sensor;
         return nullptr;
     }
 
     sensor->dev->get_semaphore()->give();
+    DEV_PRINTF("VL53L3C: Detection and initialization successful\n");
 
     return sensor;
 }
@@ -93,19 +110,23 @@ AP_RangeFinder_Backend *AP_RangeFinder_VL53L3C::detect(RangeFinder::RangeFinder_
 bool AP_RangeFinder_VL53L3C::check_id(void)
 {
     uint16_t model_id = 0;
+    DEV_PRINTF("VL53L3C: Starting sensor detection on I2C address 0x%02X\n", dev->get_bus_address());
+
     if (!read_register16(IDENTIFICATION__MODEL_ID, model_id)) {
-        DEV_PRINTF("VL53L3C: Failed to read MODEL_ID register\n");
+        DEV_PRINTF("VL53L3C: ERROR - Failed to read MODEL_ID register from I2C address 0x%02X\n", dev->get_bus_address());
         return false;
     }
 
-    DEV_PRINTF("VL53L3C: Read MODEL_ID=0x%04X (expected 0x%04X)\n", model_id, VL53L3C_PRODUCT_ID);
+    DEV_PRINTF("VL53L3C: Read MODEL_ID=0x%04X from address 0x%02X (expected 0x%04X)\n",
+               model_id, dev->get_bus_address(), VL53L3C_PRODUCT_ID);
 
     if (model_id != VL53L3C_PRODUCT_ID) {
-        DEV_PRINTF("VL53L3C: MODEL_ID mismatch!\n");
+        DEV_PRINTF("VL53L3C: ERROR - MODEL_ID mismatch! Got 0x%04X, expected 0x%04X\n",
+                   model_id, VL53L3C_PRODUCT_ID);
         return false;
     }
 
-    DEV_PRINTF("VL53L3C: Sensor detected successfully\n");
+    DEV_PRINTF("VL53L3C: Sensor detected successfully at address 0x%02X\n", dev->get_bus_address());
     return true;
 }
 
@@ -114,9 +135,12 @@ bool AP_RangeFinder_VL53L3C::check_id(void)
  */
 bool AP_RangeFinder_VL53L3C::init(DistanceMode distance_mode)
 {
+    DEV_PRINTF("VL53L3C: Starting initialization for address 0x%02X\n", dev->get_bus_address());
+
     // Allocate bare driver device structure
     vl53lx_dev = NEW_NOTHROW VL53LX_Dev_t;
     if (vl53lx_dev == nullptr) {
+        DEV_PRINTF("VL53L3C: ERROR - Failed to allocate memory for device structure\n");
         return false;
     }
 
@@ -124,20 +148,25 @@ bool AP_RangeFinder_VL53L3C::init(DistanceMode distance_mode)
     memset(vl53lx_dev, 0, sizeof(VL53LX_Dev_t));
     VL53L_DEV->i2c_slave_address = dev->get_bus_address();
     VL53L_DEV->i2c_device = dev.get();  // Store I2CDevice pointer for platform layer
+    DEV_PRINTF("VL53L3C: Configured I2C device at address 0x%02X\n", VL53L_DEV->i2c_slave_address);
 
     // Wait for device to boot
+    DEV_PRINTF("VL53L3C: Waiting for device boot...\n");
     VL53LX_Error status = VL53LX_WaitDeviceBooted(VL53L_DEV);
     if (status != VL53LX_ERROR_NONE) {
-        DEV_PRINTF("VL53L3C: WaitDeviceBooted failed: %d\n", status);
+        DEV_PRINTF("VL53L3C: ERROR - WaitDeviceBooted failed with status: %d\n", status);
         return false;
     }
+    DEV_PRINTF("VL53L3C: Device booted successfully\n");
 
     // Initialize the device
+    DEV_PRINTF("VL53L3C: Initializing device data...\n");
     status = VL53LX_DataInit(VL53L_DEV);
     if (status != VL53LX_ERROR_NONE) {
-        DEV_PRINTF("VL53L3C: DataInit failed: %d\n", status);
+        DEV_PRINTF("VL53L3C: ERROR - DataInit failed with status: %d\n", status);
         return false;
     }
+    DEV_PRINTF("VL53L3C: DataInit completed successfully\n");
 
     // Set distance mode
     VL53LX_DistanceModes vl53_mode;
@@ -152,29 +181,37 @@ bool AP_RangeFinder_VL53L3C::init(DistanceMode distance_mode)
             return false;
     }
 
+    DEV_PRINTF("VL53L3C: Setting distance mode to %d\n", (int)vl53_mode);
     status = VL53LX_SetDistanceMode(VL53L_DEV, vl53_mode);
     if (status != VL53LX_ERROR_NONE) {
-        DEV_PRINTF("VL53L3C: SetDistanceMode failed: %d\n", status);
+        DEV_PRINTF("VL53L3C: ERROR - SetDistanceMode failed with status: %d\n", status);
         return false;
     }
+    DEV_PRINTF("VL53L3C: Distance mode set successfully\n");
 
     // Set measurement timing budget
+    DEV_PRINTF("VL53L3C: Setting timing budget to %lu us\n", (unsigned long)TIMING_BUDGET_US);
     status = VL53LX_SetMeasurementTimingBudgetMicroSeconds(VL53L_DEV, TIMING_BUDGET_US);
     if (status != VL53LX_ERROR_NONE) {
-        DEV_PRINTF("VL53L3C: SetMeasurementTimingBudget failed: %d\n", status);
+        DEV_PRINTF("VL53L3C: ERROR - SetMeasurementTimingBudget failed with status: %d\n", status);
         return false;
     }
+    DEV_PRINTF("VL53L3C: Timing budget set successfully\n");
 
     // Start continuous ranging
+    DEV_PRINTF("VL53L3C: Starting continuous measurement\n");
     status = VL53LX_StartMeasurement(VL53L_DEV);
     if (status != VL53LX_ERROR_NONE) {
-        DEV_PRINTF("VL53L3C: StartMeasurement failed: %d\n", status);
+        DEV_PRINTF("VL53L3C: ERROR - StartMeasurement failed with status: %d\n", status);
         return false;
     }
+    DEV_PRINTF("VL53L3C: Measurement started successfully\n");
 
     // Register periodic timer callback
+    DEV_PRINTF("VL53L3C: Registering periodic callback at %lu ms intervals\n", (unsigned long)MEASUREMENT_TIME_MS);
     dev->register_periodic_callback(MEASUREMENT_TIME_MS * 1000UL, FUNCTOR_BIND_MEMBER(&AP_RangeFinder_VL53L3C::timer, void));
 
+    DEV_PRINTF("VL53L3C: Initialization complete for address 0x%02X\n", dev->get_bus_address());
     return true;
 }
 

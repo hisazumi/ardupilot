@@ -289,6 +289,7 @@ __INITFUNC__ void RangeFinder::detect_instance(uint8_t instance, uint8_t& serial
     AP_RangeFinder_Backend_Serial *(*serial_create_fn)(RangeFinder::RangeFinder_State&, AP_RangeFinder_Params&) = nullptr;
 
     const Type _type = (Type)params[instance].type.get();
+    hal.console->printf("RangeFinder: detect_instance %d, type=%d (VL53L3C=46)\n", instance, (int)_type);
     switch (_type) {
 #if AP_RANGEFINDER_PULSEDLIGHTLRF_ENABLED
     case Type::PLI2C:
@@ -383,15 +384,19 @@ __INITFUNC__ void RangeFinder::detect_instance(uint8_t instance, uint8_t& serial
         break;
 #if AP_RANGEFINDER_VL53L3C_ENABLED
     case Type::VL53L3C:
+        hal.console->printf("RangeFinder: Attempting to detect VL53L3C on address 0x%02X\n", (int)params[instance].address.get());
         FOREACH_I2C(i) {
+            hal.console->printf("RangeFinder: Trying I2C bus %d\n", (int)i);
             // Changed to Long mode for extended range (up to 3000mm vs Medium's ~500mm)
             if (_add_backend(AP_RangeFinder_VL53L3C::detect(state[instance], params[instance],
                                                             hal.i2c_mgr->get_device(i, params[instance].address),
                                                             AP_RangeFinder_VL53L3C::DistanceMode::Long),
                              instance)) {
+                hal.console->printf("RangeFinder: VL53L3C detected successfully on bus %d\n", (int)i);
                 break;
             }
         }
+        hal.console->printf("RangeFinder: VL53L3C detection completed\n");
         break;
 #endif
 #if AP_RANGEFINDER_BENEWAKE_TFMINIPLUS_ENABLED

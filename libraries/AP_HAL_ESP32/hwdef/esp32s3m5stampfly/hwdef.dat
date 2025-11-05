@@ -109,3 +109,10 @@ AUTOBUILD_TARGETS Copter
 # We disable the Front sensor and enable only the Bottom sensor for altitude measurement
 define TOF_XSHUT_FRONT 9
 define TOF_XSHUT_BOTTOM 7
+
+# Enable RangeFinder support
+define AP_RANGEFINDER_ENABLED 1
+define AP_RANGEFINDER_VL53L3C_ENABLED 1
+
+# RangeFinder is on I2C bus 0 (internal) at default address 0x29
+# This is the bottom ToF sensor used for altitude measurement
